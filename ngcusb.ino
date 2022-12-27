@@ -17,13 +17,14 @@
 // GameCube 4--GND
 // GameCube 6--3.3V
 
-const uint32_t watchdogSeconds = 3;
+const uint32_t watchdogSeconds = 4;
 
 #define PRODUCT_ID_JOYSTICK 0x7E47
+#define PRODUCT_ID_KEYBOARD 0x7E48
 
 enum { MODE_WASD13 = 0, MODE_XBOX, MODE_PADJOY, MODE_ARROWS };
-enum { USB_JK, USB_XBOX };
-const uint8_t usbMode[] = { USB_JK, USB_XBOX, USB_JK, USB_JK };
+enum { USB_J, USB_K, USB_XBOX };
+const uint8_t usbMode[] = { USB_K, USB_XBOX, USB_J, USB_K };
 uint32_t mode = MODE_WASD13;
 
 GameCubeController gc(PA6);
@@ -59,17 +60,25 @@ void startUSBMode() {
     XBox360.setManualReportMode(true);
     delay(100);
   }
-  else if (usbMode[mode] == USB_JK) {
-    USBComposite.setProductString("NGC pad to usb");
+  else if (usbMode[mode] == USB_J) {
+    USBComposite.setProductString("NGC pad to joystick");
     USBComposite.setProductId(PRODUCT_ID_JOYSTICK);  
-    HID.begin(HID_KEYBOARD_JOYSTICK);
+    HID.begin(HID_JOYSTICK);
     joystick.setManualReportMode(true);
-//    joystick.sendReport();
+    keyboard.begin();
+    delay(100);
+  }
+  else if (usbMode[mode] == USB_K) {
+    USBComposite.setProductString("NGC pad to keyboard");
+    USBComposite.setProductId(PRODUCT_ID_KEYBOARD);  
+    HID.begin(HID_KEYBOARD);
+    joystick.setManualReportMode(true);
     keyboard.begin();
     delay(100);
   }
 }
 
+/*
 void endUSBMode() {
   if (usbMode[mode] == USB_XBOX) {
     XBox360.end();
@@ -101,6 +110,7 @@ void endMode() {
     joystick.sendReport();
   }
 }
+*/
 
 void setup() {
   iwdg_init(IWDG_PRE_256, watchdogSeconds*156);
@@ -176,6 +186,18 @@ void emit(GameControllerData_t* d) {
     }
 }
 
+void indicate(int n) {
+  digitalWrite(LED,1);
+  delay(200);
+  for (int i=0;i<n;i++) {
+    digitalWrite(LED,0);
+    delay(200);
+    digitalWrite(LED,1);
+    delay(200);
+  }
+  delay(200);
+}
+
 void loop() {
   iwdg_feed();
   
@@ -197,18 +219,21 @@ void loop() {
         newMode = MODE_ARROWS;
       }
       if (newMode != mode) {
-        endMode();
+        digitalWrite(LED,1);
+        EEPROM8_storeValue(0, newMode);
         if (usbMode[newMode] != usbMode[mode]) {
-          endUSBMode();
-          mode = newMode;
-          startUSBMode();
-          while(!USBComposite);
+          delay(100);
+          nvic_sys_reset();
         }
         else {
+          if (usbMode[newMode] == USB_K) {
+            keyboard.releaseAll();
+            for (uint32_t i=0; i<16; i++)
+              pressed[i] = false;
+          }
           mode = newMode;
+          indicate(1+mode);
         }
-        EEPROM8_storeValue(0, mode);
-        return;
       }
     }
     emit(&data);
