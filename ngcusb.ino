@@ -124,6 +124,7 @@ void setup() {
     mode = v;
   startUSBMode();
   while(!USBComposite);
+  gc.setDPadToJoystick(false);
   gc.begin();
 }
 
