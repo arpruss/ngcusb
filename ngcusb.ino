@@ -2,7 +2,7 @@
 #include "GameControllers.h"
 #include <USBComposite.h>
 
-// 1000 = - , 10 = -
+// left:XBox, right:padjoy, down:wasd13, up:arrows,space,backspace,+,-
 
 #define LED PC13
 // Facing GameCube socket (as on console), flat on top:
@@ -19,11 +19,11 @@
 
 const uint32_t watchdogSeconds = 3;
 
-#define PRODUCT_ID_JOYSTICK 0x7E48
+#define PRODUCT_ID_JOYSTICK 0x7E47
 
-enum { MODE_WASD13 = 0, MODE_XBOX, MODE_PADJOY };
+enum { MODE_WASD13 = 0, MODE_XBOX, MODE_PADJOY, MODE_ARROWS };
 enum { USB_JK, USB_XBOX };
-const uint8_t usbMode[] = { USB_JK, USB_XBOX, USB_JK };
+const uint8_t usbMode[] = { USB_JK, USB_XBOX, USB_JK, USB_JK };
 uint32_t mode = MODE_WASD13;
 
 GameCubeController gc(PA6);
@@ -47,21 +47,24 @@ const uint16_t gcmaskL = 0x4000;
 
  */
 const uint8_t wasd13[16] = { 'e', 'q', 'z', 'c', '3'/*start*/,0,0,0, 'a', 'd', 's', 'w', '1', 0,0  };
+const uint8_t arrows[16] = { ' ', KEY_BACKSPACE, '[', ']', '='/*start*/,0,0,0, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW, KEY_UP_ARROW, '-', 0,0  };
 const uint8_t joy[16] = { 1, 2, 3, 4, 5, 0,0,0, 6,7,8,9, 10,11,12,0 };
+
+const uint8_t xbuttons[16] = { XBOX_A, XBOX_B, XBOX_X, XBOX_Y, XBOX_START, 0,0,0, XBOX_DLEFT, XBOX_DRIGHT, XBOX_DDOWN, XBOX_DUP, XBOX_RSHOULDER, XBOX_R3, XBOX_L3 }; 
 
 void startUSBMode() {
   if (usbMode[mode] == USB_XBOX) {
-    USBComposite.setProductString("Pad to xbox");
+    USBComposite.setProductString("NGC pad to xbox");
     XBox360.begin();
     XBox360.setManualReportMode(true);
     delay(100);
   }
   else if (usbMode[mode] == USB_JK) {
-    USBComposite.setProductString("Pad to usb");
+    USBComposite.setProductString("NGC pad to usb");
     USBComposite.setProductId(PRODUCT_ID_JOYSTICK);  
     HID.begin(HID_KEYBOARD_JOYSTICK);
     joystick.setManualReportMode(true);
-    joystick.sendReport();
+//    joystick.sendReport();
     keyboard.begin();
     delay(100);
   }
@@ -82,7 +85,7 @@ void endMode() {
     XBox360.buttons(0);
     XBox360.send();
   }
-  else if (mode == MODE_WASD13) {
+  else if (mode == MODE_WASD13 || mode == MODE_ARROWS) {
     keyboard.releaseAll();
     for (uint32_t i = 0 ; i < 16 ; i++)
       pressed[i] = false;
@@ -110,38 +113,47 @@ void setup() {
   else
     mode = v;
   startUSBMode();
+  while(!USBComposite);
   gc.begin();
+}
+
+static inline int16_t range10u16s(uint16_t x) {
+  return (((int32_t)(uint32_t)x - 512) * 32767 + 255) / 512;
 }
 
 void emit(GameControllerData_t* d) {
     if (mode == MODE_XBOX) {
       XBox360.buttons(0);
-      XBox360.button(XBOX_DLEFT, 0 != (d->buttons & gcmaskDLeft));
-      XBox360.button(XBOX_DRIGHT, 0 != (d->buttons & gcmaskDRight));
-      XBox360.button(XBOX_DUP, 0 != (d->buttons & gcmaskDUp));
-      XBox360.button(XBOX_DDOWN, 0 != (d->buttons & gcmaskDDown));
-      XBox360.button(XBOX_A, 0 != (d->buttons & gcmaskA));
-      XBox360.button(XBOX_B, 0 != (d->buttons & gcmaskB));
-      XBox360.button(XBOX_START, 0 != (d->buttons & gcmaskStart));
-      XBox360.button(XBOX_RSHOULDER, 0 != (d->buttons & gcmaskZ));
+      uint16_t mask = 1;
+      for (uint32_t i = 0 ; i < 16 ; i++,mask<<=1) {
+        XBox360.button(xbuttons[i], 0 != (d->buttons & mask));
+      }
+      XBox360.X(range10u16s(d->joystickX));
+      XBox360.Y(-range10u16s(d->joystickY));
+      XBox360.XRight(range10u16s(d->cX));
+      XBox360.YRight(-range10u16s(d->cY));
+      XBox360.sliderLeft(d->shoulderLeft / 4);
+      XBox360.sliderRight(d->shoulderRight / 4);
+      
       XBox360.send();
     }
-    else if (mode == MODE_WASD13) {
-      joystick.sendReport(); // just in case
+    else if (mode == MODE_WASD13 || mode == MODE_ARROWS) {
+      const uint8_t* keyMap = mode == MODE_WASD13 ? wasd13 : arrows;
+      //joystick.sendReport(); // just in case
       uint32_t mask = 1;
       for (uint32_t i = 0 ; i < 16 ; i++,mask<<=1) {
-        uint16_t k = wasd13[i];
+        uint16_t k = keyMap[i];
         if (!k)
           continue;
         if ((d->buttons & mask)) {
           if (!pressed[i]) {
-            keyboard.press(wasd13[i]);
+            keyboard.press(k);
             pressed[i] = true;
           }
         }
         else {
           if (pressed[i]) {
-            keyboard.release(wasd13[i]);
+            keyboard.release(k);
             pressed[i] = false;
           }
         }
@@ -151,7 +163,7 @@ void emit(GameControllerData_t* d) {
       uint32_t mask = 1;
       for (uint32_t i = 0 ; i < 16 ; i++,mask<<=1) {
         uint16_t b = joy[i];
-        if (b) 
+        if (b)
           joystick.button(b, 0 != (d->buttons & mask));
       }
       joystick.X(d->joystickX);
@@ -175,11 +187,14 @@ void loop() {
       if ((data.buttons & gcmaskDLeft)) {
         newMode = MODE_XBOX;
       }
-      else if ((data.buttons & gcmaskDDown)) {
+      else if ((data.buttons & gcmaskDRight)) {
         newMode = MODE_PADJOY;
       }
-      else if ((data.buttons & gcmaskDRight)) {
+      else if ((data.buttons & gcmaskDDown)) {
         newMode = MODE_WASD13;
+      }
+      else if ((data.buttons & gcmaskDUp)) {
+        newMode = MODE_ARROWS;
       }
       if (newMode != mode) {
         endMode();
@@ -187,6 +202,7 @@ void loop() {
           endUSBMode();
           mode = newMode;
           startUSBMode();
+          while(!USBComposite);
         }
         else {
           mode = newMode;
