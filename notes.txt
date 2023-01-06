@@ -1,0 +1,40 @@
+// Facing GameCube socket (as on console, male), flat on top:
+//    123
+//    ===
+//    456
+1 -white  -5V
+2 -red    -data
+3 -       -gnd?
+4 -yellow -gnd
+5 -
+6 -green  -3.3V
+
+
+standard controller button bits:
+0: A
+1: B
+2: X
+3: Y
+4: start
+5: 0
+6: 0
+7: 0
+8: left
+9: right
+10: down
+11: up
+12: z
+13: r
+14: l
+15: 1
+
+outdoor adventure pad:
+bits:
+
+row 1: 8 4 1 2
+row 2: 11 10 5 3
+row 3: 9 12
+
+always: 5
+
+identify: bit 5 on, bits 6 and 7 off, bit 15 off
