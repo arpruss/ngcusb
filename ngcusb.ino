@@ -9,7 +9,7 @@
 
 //#define TEST
 
-#define MAX_CONTROLLERS 1
+#define MAX_CONTROLLERS 2
 
 #ifdef TEST
 #define TEST1 PB12
@@ -40,6 +40,32 @@ const uint32_t watchdogSeconds = 4;
 #define PRODUCT_ID_JOYSTICK 0x7E47
 #define PRODUCT_ID_KEYBOARD 0x7E48
 
+GameCubeController gc1(PA6);
+#if MAX_CONTROLLERS == 1
+GameCubeController* controllers[MAX_CONTROLLERS] = { &gc1 };
+#else
+GameCubeController gc2(PB9);
+GameCubeController* controllers[MAX_CONTROLLERS] = { &gc1, &gc2 };
+#endif
+
+const uint8_t joystickReportDescription[] = {
+   HID_JOYSTICK_REPORT_DESCRIPTOR(),
+#if MAX_CONTROLLERS > 1   
+   HID_JOYSTICK_REPORT_DESCRIPTOR(HID_JOYSTICK_REPORT_ID+1),
+#endif   
+};
+
+USBHID HID;
+HIDJoystick joystick1(HID);
+#if MAX_CONTROLLERS == 1
+HIDJoystick* joysticks[] = { &joystick1 };
+USBXBox360 XBox360;
+#else
+HIDJoystick joystick2(HID, HID_JOYSTICK_REPORT_ID+1);
+HIDJoystick* joysticks[] = { &joystick1, &joystick2 };
+USBXBox360W<2> XBox360s;
+#endif
+
 const uint32_t maximumPollingRateMicroseconds=2500;
 uint32_t lastPollTime = 0;
 enum { MODE_POWERPADRIGHT = 0, MODE_XBOX, MODE_PADJOY, MODE_POWERPADLEFT };
@@ -47,18 +73,8 @@ enum { USB_J, USB_K, USB_XBOX };
 const uint8_t usbMode[] = { USB_K, USB_XBOX, USB_J, USB_K };
 uint32_t mode = MODE_POWERPADRIGHT;
 
-GameCubeController gc1(PA6);
-#if MAX_CONTROLLERS == 1
-GameCubeController* controllers[MAX_CONTROLLERS] = { &gc1 };
-#else
-GameCubeController gc2(PA7);
-GameCubeController* controllers[MAX_CONTROLLERS] = { &gc1, &gc2 };
-#endif
-USBXBox360 XBox360;
-USBHID HID;
 HIDKeyboard keyboard(HID);
-HIDJoystick joystick(HID);
-bool pressed[16];
+bool pressed[MAX_CONTROLLERS][16];
 /* 
  *  const uint16_t gcmaskA = 0x01;
 const uint16_t gcmaskB = 0x02;
@@ -108,17 +124,24 @@ const uint8_t xbuttons[16] = { XBOX_A, XBOX_B, XBOX_X, XBOX_Y, XBOX_START, 0,0,0
 void startUSBMode() {
   if (usbMode[mode] == USB_XBOX) {
     USBComposite.setProductString("NGC pad to xbox");
+#if MAX_CONTROLLERS == 1    
     XBox360.begin();
     XBox360.setManualReportMode(true);
+#else
+    XBox360s.begin();
+    for (unsigned i=0; i<MAX_CONTROLLERS; i++)
+      XBox360s.controllers[i].setManualReportMode(true);
+#endif    
     delay(100);
   }
   else if (usbMode[mode] == USB_J) {
     USBComposite.setProductString("NGC pad to joystick");
     USBComposite.setProductId(PRODUCT_ID_JOYSTICK);  
     HID.setTXInterval(4);
-    HID.begin(HID_JOYSTICK);
-    joystick.setManualReportMode(true);
-    keyboard.begin();
+    HID.begin(joystickReportDescription, sizeof(joystickReportDescription));
+    for (unsigned i = 0 ; i < MAX_CONTROLLERS ; i++) {
+      joysticks[i] -> setManualReportMode(true);
+    }
     delay(100);
   }
   else if (usbMode[mode] == USB_K) {
@@ -126,7 +149,6 @@ void startUSBMode() {
     USBComposite.setProductId(PRODUCT_ID_KEYBOARD);  
     HID.setTXInterval(4);
     HID.begin(HID_KEYBOARD);
-    joystick.setManualReportMode(true);
     keyboard.begin();
     delay(100);
   }
@@ -185,7 +207,6 @@ void setup() {
     mode = MODE_PADJOY;
   else
     mode = v;
-  mode = MODE_PADJOY;
   startUSBMode();
   while(!USBComposite);
   for (uint8_t i = 0 ; i < MAX_CONTROLLERS ; i++) {
@@ -231,57 +252,66 @@ static inline int16_t range10u16s(uint16_t x) {
 
 void emit(GameControllerData_t* d, int controllerNumber) {
     if (mode == MODE_XBOX) {
-      XBox360.buttons(0);
+#if MAX_CONTROLLERS == 1
+      XBox360* c = &XBox360;
+#else
+      USBXBox360WController* c = &(XBox360s.controllers[controllerNumber]);
+#endif      
+      c->buttons(0);
       uint16_t mask = 1;
-      for (uint32_t i = 0 ; i < 16 ; i++,mask<<=1) {
-        XBox360.button(xbuttons[i], 0 != (d->buttons & mask));
+      for (unsigned i = 0 ; i < 16 ; i++,mask<<=1) {
+        c->button(xbuttons[i], 0 != (d->buttons & mask));
       }
-      XBox360.X(range10u16s(d->joystickX));
-      XBox360.Y(-range10u16s(d->joystickY));
-      XBox360.XRight(range10u16s(d->cX));
-      XBox360.YRight(-range10u16s(d->cY));
-      XBox360.sliderLeft(d->shoulderLeft / 4);
-      XBox360.sliderRight(d->shoulderRight / 4);
+      c->X(range10u16s(d->joystickX));
+      c->Y(-range10u16s(d->joystickY));
+      c->XRight(range10u16s(d->cX));
+      c->YRight(-range10u16s(d->cY));
+      c->sliderLeft(d->shoulderLeft / 4);
+      c->sliderRight(d->shoulderRight / 4);
       
-      XBox360.send();
+      c->send();
     }
     else if (mode == MODE_POWERPADRIGHT || mode == MODE_POWERPADLEFT) {
       const uint8_t* keyMap = ((mode == MODE_POWERPADRIGHT) ^ (0 != controllerNumber)) ? ppRight : ppLeft;
       //joystick.sendReport(); // just in case
       uint32_t mask = 1;
+      bool* p = pressed[controllerNumber];
       for (uint32_t i = 0 ; i < 16 ; i++,mask<<=1) {
         uint16_t k = keyMap[i];
         if (!k)
           continue;
         if ((d->buttons & mask)) {
-          if (!pressed[i]) {
+          if (!p[i]) {
             keyboard.press(k);
-            pressed[i] = true;
+            p[i] = true;
           }
         }
         else {
-          if (pressed[i]) {
+          if (p[i]) {
             keyboard.release(k);
-            pressed[i] = false;
+            p[i] = false;
           }
         }
       }
     }
     else if (mode == MODE_PADJOY) {
       uint32_t mask = 1;
+      HIDJoystick* j = joysticks[controllerNumber];
       for (uint32_t i = 0 ; i < 16 ; i++,mask<<=1) {
         uint16_t b = joy[i];
         if (b)
-          joystick.button(b, 0 != (d->buttons & mask));
+          j->button(b, 0 != (d->buttons & mask));
+        else
+          j->button(b, 0);        
       }
-      joystick.X(d->joystickX);
-      joystick.Y(d->joystickY);
-      joystick.Xrotate(d->cX);
-      joystick.Yrotate(d->cY);        
-      joystick.sliderLeft(d->shoulderLeft);
-      joystick.sliderRight(d->shoulderRight);
+      j->X(d->joystickX);
+      j->Y(d->joystickY);
+      j->Xrotate(d->cX);
+      j->Yrotate(d->cY);        
+      j->sliderLeft(d->shoulderLeft);
+      j->sliderRight(d->shoulderRight);
       TEST2WRITE(1);
-      joystick.sendReport();
+      j->sendReport();
       TEST2WRITE(0);
     }
 }
@@ -337,8 +367,9 @@ void loop() {
           else {
             if (usbMode[newMode] == USB_K) {
               keyboard.releaseAll();
-              for (uint32_t i=0; i<16; i++)
-                pressed[i] = false;
+              for (unsigned c=0; c<MAX_CONTROLLERS; c++)
+                for (unsigned i=0; i<16; i++)
+                  pressed[c][i] = false;
             }
             mode = newMode;
             indicate(1+mode);
@@ -355,4 +386,8 @@ void loop() {
   }
 }
 
-
+/*
+ * 
+ * wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+ * efceefefeffeeffefefffefeeeesc[[[]]]]=xaxxxxxxxxxxxxxxxxxxxxxxddxxxxxdwdddddddddddddddddddwwddd------==qqqqvvq
+ */
