@@ -48,6 +48,8 @@ GameCubeController gc2(PB9);
 GameCubeController* controllers[MAX_CONTROLLERS] = { &gc1, &gc2 };
 #endif
 
+uint32_t lastActive[MAX_CONTROLLERS] = {0};
+
 const uint8_t joystickReportDescription[] = {
    HID_JOYSTICK_REPORT_DESCRIPTOR(),
 #if MAX_CONTROLLERS > 1   
@@ -120,6 +122,8 @@ const uint8_t ppLeft[16]  = { 'q', 'z', 0,   0,   '=',  0,   0,   0,   'x', 'w',
 //const uint8_t arrows[16] =  { ' ', BS, '[',  ']', '=', 0,   0,   0, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW, KEY_UP_ARROW, '-', 0,0  };
 const uint8_t joy[16] = { 1, 2, 3, 4, 5, 0,0,0, 6,7,8,9, 10,11,12,0 };
 const uint8_t xbuttons[16] = { XBOX_A, XBOX_B, XBOX_X, XBOX_Y, XBOX_START, 0,0,0, XBOX_DLEFT, XBOX_DRIGHT, XBOX_DDOWN, XBOX_DUP, XBOX_RSHOULDER, XBOX_R3, XBOX_L3 }; 
+
+const GameControllerData_t empty = { device: 0, buttons: 0, joystickX: 512, joystickY: 512, cX: 512, cY: 512 };
 
 void startUSBMode() {
   if (usbMode[mode] == USB_XBOX) {
@@ -250,7 +254,7 @@ static inline int16_t range10u16s(uint16_t x) {
   return (((int32_t)(uint32_t)x - 512) * 32767 + 255) / 512;
 }
 
-void emit(GameControllerData_t* d, int controllerNumber) {
+void emit(const GameControllerData_t* d, int controllerNumber) {
     if (mode == MODE_XBOX) {
 #if MAX_CONTROLLERS == 1
       XBox360* c = &XBox360;
@@ -332,16 +336,14 @@ void loop() {
   iwdg_feed();
 
 #if MAX_CONTROLLERS == 1
-  while((uint32_t)(micros()-lastPollTime) < maximumPollingRateMicroseconds) ;
+  while((uint32_t)(micros()-lastActive[0]) < maximumPollingRateMicroseconds) ;
 #endif  
   
   GameControllerData_t data;
   bool someSuccess = false;
   for (uint8_t controller = 0 ; controller < MAX_CONTROLLERS ; controller++) {
     if (controllers[controller]->read(&data)) {
-#if MAX_CONTROLLERS == 1      
-      lastPollTime = micros();
-#endif      
+      lastActive[controller] = micros();
       someSuccess = true;
       uint32_t newMode = mode;
       if ((data.buttons & (gcmaskStart | gcmaskZ)) == (gcmaskStart | gcmaskZ)) {
@@ -361,6 +363,8 @@ void loop() {
           digitalWrite(LED,1);
           EEPROM8_storeValue(0, newMode);
           if (usbMode[newMode] != usbMode[mode]) {
+            for (unsigned i = 0 ; i < MAX_CONTROLLERS ; i++)
+              emit(&empty, 0);
             delay(100);
             nvic_sys_reset();
           }
@@ -378,16 +382,30 @@ void loop() {
       }
       emit(&data, controller);
     }
+    else {
+      if (micros()-lastActive[controller] >= 2000000ul) {
+#if MAX_CONTROLLERS == 1
+        emit(&empty, controller);
+#else
+        if (mode != MODE_XBOX) {
+          emit(&empty, controller);
+        }
+        else if (XBox360s.controllers[controller].isConnected()) {
+          emit(&empty, controller);
+          XBox360s.controllers[controller].connect(false);
+        }
+#endif        
+      }
+    }
   }
   digitalWrite(LED,! someSuccess);
   if (! someSuccess) {
-//    keyboard.print("!");
-    delay(1);
+    delay(4);
   }
 }
 
 /*
- * 
+ * wwwesessees
  * wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
  * efceefefeffeeffefefffefeeeesc[[[]]]]=xaxxxxxxxxxxxxxxxxxxxxxxddxxxxxdwdddddddddddddddddddwwddd------==qqqqvvq
  */
