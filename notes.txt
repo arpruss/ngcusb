@@ -32,7 +32,7 @@ outdoor adventure pad:
 bits:
 
 row 1: 8 4 1 2
-row 2: 11 10 5 3
+row 2: 11 10 0 3
 row 3: 9 12
 
 always: 5

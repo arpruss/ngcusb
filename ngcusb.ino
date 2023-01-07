@@ -2,15 +2,6 @@
 #include "GameControllers.h"
 #include <USBComposite.h>
 
-//timing: mat: 401us
-//usb 24ms
-//usb at 4: 
-//xbox 8ms
-
-//#define TEST
-
-#define MAX_CONTROLLERS 2
-
 #ifdef TEST
 #define TEST1 PB12
 #define TEST2 PB13
@@ -20,6 +11,8 @@
 #define TEST1WRITE(x) 
 #define TEST2WRITE(x)
 #endif
+
+#define MAX_CONTROLLERS 2
 
 // up:XBox, down:padjoy, down:power pad right, up:power pad left
 
@@ -119,8 +112,8 @@ const uint16_t gcmaskL = 0x4000;
                           //     00   01   02   03   04   05   06   07   08   09   10   11   12   13   14   15
 const uint8_t ppRight[16]    = { 'v', 'r', 0,   0,   ']', 0,   0,   0,   'e', 'c', 's', 'f', '[', 0,   0,   0 };
 const uint8_t ppLeft[16]     = { 'q', 'z', 0,   0,   '=',  0,   0,   0,  'x', 'w', 'd', 'a', '-',  0,   0,   0 };
-const uint8_t trackMeetLeft[16] = { 0,  'e', ' ', 0,   'q', 's', 0,   0,   BS,  'z', 'a', 0,   'x', 0,   0,    0 }; // mimic FCEUMM powerpad left half on middle two
-const uint8_t athleticWorld[16]= { 0,  'e', ' ', 'f',  'w', 'd', 0,   0,   BS, 'x', 's', 'a',  'c', 0,   0,    0 }; // FCEUMM powerpad side 1, activated on scroll lock
+const uint8_t trackMeetLeft[16] = { 's',  'e', ' ', 0,   'q', 0, 0,   0,   BS,  'z', 'a', 0,   'x', 0,   0,    0 }; // mimic FCEUMM powerpad left half on middle two
+const uint8_t athleticWorld[16]= { 'd',  'e', ' ', 'f',  'w', 0, 0,   0,   BS, 'x', 's', 'a',  'c', 0,   0,    0 }; // FCEUMM powerpad side 1, activated on scroll lock
 //const uint8_t arrows[16] =  { ' ', BS, '[',  ']', '=', 0,   0,   0, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW, KEY_UP_ARROW, '-', 0,0  };
 const uint8_t joy[16] = { 1, 2, 3, 4, 5, 0,0,0, 6,7,8,9, 10,11,12,0 };
 const uint8_t xbuttons[16] = { XBOX_A, XBOX_B, XBOX_X, XBOX_Y, XBOX_START, 0,0,0, XBOX_DLEFT, XBOX_DRIGHT, XBOX_DDOWN, XBOX_DUP, XBOX_RSHOULDER, XBOX_R3, XBOX_L3 }; 
@@ -210,7 +203,7 @@ void setup() {
   EEPROM8_init();
   int v = EEPROM8_getValue(0);
   if (v < 0)
-    mode = MODE_PADJOY;
+    mode = MODE_POWERPADLEFT;
   else
     mode = v;
   startUSBMode();
@@ -437,4 +430,7 @@ void loop() {
  * wwwesessees
  * wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
  * efceefefeffeeffefefffefeeeesc[[[]]]]=xaxxxxxxxxxxxxxxxxxxxxxxddxxxxxdwdddddddddddddddddddwwddd------==qqqqvvq
+ * 
+ * cccxfffdddxxc                            sxcdsdcsdcsdssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssdsdsdsdafafafsdsdsdsdwsewewedsdsdsdsdsdsdsxddcsdxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxafaaaaaaaaaaaaaaaaaaaafeaeawewweeeeeeeeeeeeeeeeewwwwwwwwwwwwwwxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ * 
  */
