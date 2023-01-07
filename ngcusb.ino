@@ -21,7 +21,7 @@
 #define TEST2WRITE(x)
 #endif
 
-// left:XBox, right:padjoy, down:power pad right, up:power pad left
+// up:XBox, down:padjoy, down:power pad right, up:power pad left
 
 #define LED PC13
 // Facing GameCube socket (as on console), flat on top:
@@ -116,9 +116,11 @@ const uint16_t gcmaskL = 0x4000;
 #define EN KEY_RETURN
 #define BS KEY_BACKSPACE
 
-                       //     00   01   02   03   04   05   06   07   08   09   10   11   12   13   14   15
-const uint8_t ppRight[16] = { 'v', 'r', 0,   0,   ']', 0,   0,   0,   'e', 'c', 's', 'f', '[', 0,   0,   0 };
-const uint8_t ppLeft[16]  = { 'q', 'z', 0,   0,   '=',  0,   0,   0,   'x', 'w', 'd', 'a', '-',  0,   0,   0 };
+                          //     00   01   02   03   04   05   06   07   08   09   10   11   12   13   14   15
+const uint8_t ppRight[16]    = { 'v', 'r', 0,   0,   ']', 0,   0,   0,   'e', 'c', 's', 'f', '[', 0,   0,   0 };
+const uint8_t ppLeft[16]     = { 'q', 'z', 0,   0,   '=',  0,   0,   0,  'x', 'w', 'd', 'a', '-',  0,   0,   0 };
+const uint8_t trackMeetLeft[16] = { 0,  'e', ' ', 0,   'q', 's', 0,   0,   BS,  'z', 'a', 0,   'x', 0,   0,    0 }; // mimic FCEUMM powerpad left half on middle two
+const uint8_t athleticWorld[16]= { 0,  'e', ' ', 'f',  'w', 'd', 0,   0,   BS, 'x', 's', 'a',  'c', 0,   0,    0 }; // FCEUMM powerpad side 1, activated on scroll lock
 //const uint8_t arrows[16] =  { ' ', BS, '[',  ']', '=', 0,   0,   0, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW, KEY_UP_ARROW, '-', 0,0  };
 const uint8_t joy[16] = { 1, 2, 3, 4, 5, 0,0,0, 6,7,8,9, 10,11,12,0 };
 const uint8_t xbuttons[16] = { XBOX_A, XBOX_B, XBOX_X, XBOX_Y, XBOX_START, 0,0,0, XBOX_DLEFT, XBOX_DRIGHT, XBOX_DDOWN, XBOX_DUP, XBOX_RSHOULDER, XBOX_R3, XBOX_L3 }; 
@@ -254,6 +256,10 @@ static inline int16_t range10u16s(uint16_t x) {
   return (((int32_t)(uint32_t)x - 512) * 32767 + 255) / 512;
 }
 
+bool isOutdoorAdventurePad(const GameControllerData_t* d) {
+  return ( d->buttons & ( (1<<5) | (1<<6) | (1<<7) | (1<<15) ) ) == (1 << 5);
+}
+
 void emit(const GameControllerData_t* d, int controllerNumber) {
     if (mode == MODE_XBOX) {
 #if MAX_CONTROLLERS == 1
@@ -276,7 +282,18 @@ void emit(const GameControllerData_t* d, int controllerNumber) {
       c->send();
     }
     else if (mode == MODE_POWERPADRIGHT || mode == MODE_POWERPADLEFT) {
-      const uint8_t* keyMap = ((mode == MODE_POWERPADRIGHT) ^ (0 != controllerNumber)) ? ppRight : ppLeft;
+      const uint8_t* keyMap;
+      if (isOutdoorAdventurePad(d)) {
+        if(keyboard.getLEDs()>>2) { // scroll lock
+          keyMap = athleticWorld;
+        }
+        else {
+          keyMap = trackMeetLeft;
+        }
+      }
+      else {
+        keyMap = controllerNumber == 0 ? ppLeft : ppRight;
+      }
       //joystick.sendReport(); // just in case
       uint32_t mask = 1;
       bool* p = pressed[controllerNumber];
@@ -346,38 +363,50 @@ void loop() {
       lastActive[controller] = micros();
       someSuccess = true;
       uint32_t newMode = mode;
-      if ((data.buttons & (gcmaskStart | gcmaskZ)) == (gcmaskStart | gcmaskZ)) {
-        if ((data.buttons & gcmaskDLeft)) {
+      if (isOutdoorAdventurePad(&data)) {
+        if ((data.buttons & ((1<<8) | (1<<2))) == ((1<<8) | (1<<2))) {
+          if ((data.buttons & ((1<<4) | (1<<1)))) // up
+            newMode == MODE_XBOX;
+          else if ((data.buttons & ((1<<9) | (1<<12)))) // down
+            newMode = MODE_PADJOY;
+          else if ((data.buttons & (1<<3)))
+            newMode = MODE_POWERPADRIGHT;
+          else if ((data.buttons & (1<<11)))
+            newMode = MODE_POWERPADLEFT;
+        }
+      }
+      else if ((data.buttons & (gcmaskStart | gcmaskZ)) == (gcmaskStart | gcmaskZ)) {
+        if ((data.buttons & gcmaskDUp)) {
           newMode = MODE_XBOX;
         }
-        else if ((data.buttons & gcmaskDRight)) {
+        else if ((data.buttons & gcmaskDDown)) {
           newMode = MODE_PADJOY;
         }
-        else if ((data.buttons & gcmaskDDown)) {
+        else if ((data.buttons & gcmaskDRight)) {
           newMode = MODE_POWERPADRIGHT;
         }
-        else if ((data.buttons & gcmaskDUp)) {
+        else if ((data.buttons & gcmaskDLeft)) {
           newMode = MODE_POWERPADLEFT;
         }
-        if (newMode != mode) {
-          digitalWrite(LED,1);
-          EEPROM8_storeValue(0, newMode);
-          if (usbMode[newMode] != usbMode[mode]) {
-            for (unsigned i = 0 ; i < MAX_CONTROLLERS ; i++)
-              emit(&empty, 0);
-            delay(100);
-            nvic_sys_reset();
+      }
+      if (newMode != mode) {
+        digitalWrite(LED,1);
+        EEPROM8_storeValue(0, newMode);
+        if (usbMode[newMode] != usbMode[mode]) {
+          for (unsigned i = 0 ; i < MAX_CONTROLLERS ; i++)
+            emit(&empty, 0);
+          delay(100);
+          nvic_sys_reset();
+        }
+        else {
+          if (usbMode[newMode] == USB_K) {
+            keyboard.releaseAll();
+            for (unsigned c=0; c<MAX_CONTROLLERS; c++)
+              for (unsigned i=0; i<16; i++)
+                pressed[c][i] = false;
           }
-          else {
-            if (usbMode[newMode] == USB_K) {
-              keyboard.releaseAll();
-              for (unsigned c=0; c<MAX_CONTROLLERS; c++)
-                for (unsigned i=0; i<16; i++)
-                  pressed[c][i] = false;
-            }
-            mode = newMode;
-            indicate(1+mode);
-          }
+          mode = newMode;
+          indicate(1+mode);
         }
       }
       emit(&data, controller);
