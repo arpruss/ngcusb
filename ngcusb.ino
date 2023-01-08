@@ -14,7 +14,16 @@
 
 #define MAX_CONTROLLERS 2
 
-// up:XBox, down:padjoy, down:power pad right, up:power pad left
+// + and - together with:
+// up: two XBox controllers
+// down: two joysticks
+// left/right: Power Pad
+
+// In Power Pad mode:
+//     if Scroll Lock is inactive AND you are using Outdoor Challenge mat, you get qwer/sd/zxcv for FCEumm's Power Pad A
+//     if Scroll Lock is inactive AND you are using Outdoor Challenge mat, you get qw/as/zx along the central columns for FCEumm's Power Pad B left half only
+//     if you are using a Wii DDR mat, you get qwer/asdf/zxcv divided between two input DDR mats, which can be overlapped
+
 
 #define LED PC13
 // Facing GameCube socket (as on console), flat on top:
@@ -277,7 +286,7 @@ void emit(const GameControllerData_t* d, int controllerNumber) {
     else if (mode == MODE_POWERPADRIGHT || mode == MODE_POWERPADLEFT) {
       const uint8_t* keyMap;
       if (isOutdoorAdventurePad(d)) {
-        if(((keyboard.getLEDs()>>2)&1) ^ (mode == MODE_POWERPADRIGHT) ) { // scroll lock
+        if(((keyboard.getLEDs()>>2)&1) ^ (mode == MODE_POWERPADLEFT) ) { // scroll lock
           keyMap = athleticWorld;
         }
         else {
@@ -388,7 +397,7 @@ void loop() {
         if (usbMode[newMode] != usbMode[mode]) {
           for (unsigned i = 0 ; i < MAX_CONTROLLERS ; i++)
             emit(&empty, 0);
-          USBComposite.close();
+          USBComposite.end();
           delay(100);
           nvic_sys_reset();
         }
