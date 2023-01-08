@@ -23,7 +23,7 @@
 //    456
 
 // Connections for GameCube adapter:
-// GameCube 2--PA6
+// GameCube 2--PA6/PB9
 // GameCube 2--1Kohm--3.3V
 // GameCube 3--GND
 // GameCube 4--GND
@@ -277,7 +277,7 @@ void emit(const GameControllerData_t* d, int controllerNumber) {
     else if (mode == MODE_POWERPADRIGHT || mode == MODE_POWERPADLEFT) {
       const uint8_t* keyMap;
       if (isOutdoorAdventurePad(d)) {
-        if(keyboard.getLEDs()>>2) { // scroll lock
+        if(((keyboard.getLEDs()>>2)&1) ^ (mode == MODE_POWERPADRIGHT) ) { // scroll lock
           keyMap = athleticWorld;
         }
         else {
@@ -388,6 +388,7 @@ void loop() {
         if (usbMode[newMode] != usbMode[mode]) {
           for (unsigned i = 0 ; i < MAX_CONTROLLERS ; i++)
             emit(&empty, 0);
+          USBComposite.close();
           delay(100);
           nvic_sys_reset();
         }
