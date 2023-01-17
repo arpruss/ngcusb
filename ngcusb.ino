@@ -12,6 +12,8 @@
 #define TEST2WRITE(x)
 #endif
 
+#define ROLLOVER 16
+
 #define MAX_CONTROLLERS 2
 
 // + and - together with:
@@ -59,6 +61,10 @@ const uint8_t joystickReportDescription[] = {
 #endif   
 };
 
+const uint8_t keyboardReportDescription[] = {
+   HID_KEYBOARD_REPORT_DESCRIPTOR(HID_KEYBOARD_REPORT_ID, ROLLOVER)
+        ,
+};
 USBHID HID;
 HIDJoystick joystick1(HID);
 #if MAX_CONTROLLERS == 1
@@ -77,7 +83,7 @@ enum { USB_J, USB_K, USB_XBOX };
 const uint8_t usbMode[] = { USB_K, USB_XBOX, USB_J, USB_K };
 uint32_t mode = MODE_POWERPADRIGHT;
 
-HIDKeyboard keyboard(HID);
+HIDKeyboard keyboard(HID, HID_KEYBOARD_REPORT_ID, ROLLOVER);
 bool pressed[MAX_CONTROLLERS][16];
 /* 
  *  const uint16_t gcmaskA = 0x01;
@@ -121,7 +127,7 @@ const uint16_t gcmaskL = 0x4000;
                           //     00   01   02   03   04   05   06   07   08   09   10   11   12   13   14   15
 const uint8_t ppRight[16]    = { 'v', 'r', 0,   0,   ']', 0,   0,   0,   'e', 'c', 's', 'f', '[', 0,   0,   0 };
 const uint8_t ppLeft[16]     = { 'q', 'z', 0,   0,   '=',  0,   0,   0,  'x', 'w', 'd', 'a', '-',  0,   0,   0 };
-const uint8_t trackMeetLeft[16] = { 's',  'e', ' ', 0,   'q', 0, 0,   0,   BS,  'z', 'a', 0,   'x', 0,   0,    0 }; // mimic FCEUMM powerpad left half on middle two
+const uint8_t trackMeetLeft[16] = { 's',  'w', ' ', 0,   'q', 0, 0,   0,   BS,  'z', 'a', 0,   'x', 0,   0,    0 }; // mimic FCEUMM powerpad left half on middle two
 const uint8_t athleticWorld[16]= { 'd',  'e', ' ', 'f',  'w', 0, 0,   0,   BS, 'x', 's', 'a',  'c', 0,   0,    0 }; // FCEUMM powerpad side 1, activated on scroll lock
 //const uint8_t arrows[16] =  { ' ', BS, '[',  ']', '=', 0,   0,   0, KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_DOWN_ARROW, KEY_UP_ARROW, '-', 0,0  };
 const uint8_t joy[16] = { 1, 2, 3, 4, 5, 0,0,0, 6,7,8,9, 10,11,12,0 };
@@ -155,6 +161,7 @@ void startUSBMode() {
   else if (usbMode[mode] == USB_K) {
     USBComposite.setProductString("NGC pad to keyboard");
     USBComposite.setProductId(PRODUCT_ID_KEYBOARD);  
+    HID.begin(keyboardReportDescription, sizeof(keyboardReportDescription));
     HID.setTXInterval(4);
     HID.begin(HID_KEYBOARD);
     keyboard.begin();
@@ -259,7 +266,9 @@ static inline int16_t range10u16s(uint16_t x) {
 }
 
 bool isOutdoorAdventurePad(const GameControllerData_t* d) {
-  return ( d->buttons & ( (1<<5) | (1<<6) | (1<<7) | (1<<15) ) ) == (1 << 5);
+  if ( d->joystickY != 1023 || d->joystickX != 0 )
+    return false;
+  return ( d->buttons & ( (1<<6) | (1<<7) | (1<<15) ) ) == 0;
 }
 
 void emit(const GameControllerData_t* d, int controllerNumber) {
@@ -437,10 +446,5 @@ void loop() {
 }
 
 /*
- * wwwesessees
- * wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
- * efceefefeffeeffefefffefeeeesc[[[]]]]=xaxxxxxxxxxxxxxxxxxxxxxxddxxxxxdwdddddddddddddddddddwwddd------==qqqqvvq
- * 
- * cccxfffdddxxc                            sxcdsdcsdcsdssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssdsdsdsdafafafsdsdsdsdwsewewedsdsdsdsdsdsdsxddcsdxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxafaaaaaaaaaaaaaaaaaaaafeaeawewweeeeeeeeeeeeeeeeewwwwwwwwwwwwwwxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
- * 
  */
+

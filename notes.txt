@@ -35,6 +35,6 @@ row 1: 8 4 1 2
 row 2: 11 10 0 3
 row 3: 9 12
 
-always: 5
+ALMOST always: 5
 
-identify: bit 5 on, bits 6 and 7 off, bit 15 off
+identify: bits 6 and 7 off, bit 15 off, x=0, y=1023
